@@ -12,6 +12,9 @@ from Active_Walker_optimization import optimize_model_grid
 
 initial_map = np.load(mapa)
 
+OBST = (initial_map == -1).astype(np.uint8)
+
+
 # Optimization parameters:
 
 
@@ -20,7 +23,7 @@ target_map  = np.load("target_map/target_map_square.npy")
 # Choose here what you would like to do:
 
 optimize = False
-make_simulation = True
+make_simulation = False
 
 
 
