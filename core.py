@@ -1,5 +1,7 @@
 import numpy as np
+import matplotlib.pyplot as plt
 from config import e_push, MODEL_PARAMS
+
 
 
 
@@ -135,7 +137,7 @@ def try_alternative_directions(unavailable_directions, current_position, Pathes,
     
     all_dirs = np.arange(8)
     
-    # Exculding:
+    # Exclгding:
     
     candidates = [d for d in all_dirs if d not in unavailable_directions]
     valid, _ = check_if_directions_are_available(candidates, current_position, Pathes, PATHES_PARAMS, periodic_boundaries)
@@ -183,6 +185,9 @@ def triangle_vision_in_direction(
 
     # 6) Walls: in Pathes == -1
     mask[Pathes == -1] = False
+    
+    plt.imshow(mask)
+    plt.show()
 
     # 7) Get coordinates where mask == True:
     ys, xs = np.nonzero(mask)
@@ -227,55 +232,107 @@ def round_away_from_zero(x: np.ndarray) -> np.ndarray:
     return np.where(x >= 0, np.floor(x + 0.5), np.ceil(x - 0.5)).astype(np.int32)
 
 
-class VisionKernel:
-    __slots__ = ("dy", "dx", "w")
-    def __init__(self, dy, dx, w):
-        self.dy = dy.astype(np.int32)
-        self.dx = dx.astype(np.int32)
-        self.w  = w.astype(np.float32)
+class VisionKernelRays:
+    __slots__ = ("rays_dy", "rays_dx", "rays_w")
+    def __init__(self, rays_dy, rays_dx, rays_w):
+        
+        # rays:
+        
+        self.rays_dy = rays_dy
+        self.rays_dx = rays_dx
+        self.rays_w  = rays_w
 
-def precompute_kernels(d, c):
-    
-    """
-    Returns list of 8 VisionKernel.
-    """
+def precompute_kernels_with_rays(d, c):
     
     kernels = []
-
+    IY, IX = np.mgrid[-d:d+1, -d:d+1]  
 
     for dir_idx in range(8):
+        a = dir_idx * np.pi / 4.0
+        sin_a, cos_a = np.sin(a), np.cos(a)
+
+        # rotation
+        F = -IX * sin_a + IY * cos_a
+        L =  IX * cos_a + IY * sin_a
+
+        mask = (F >= 0) & (F <= d) & (np.abs(L) <= F/2)
+        Fm, Lm = F[mask], L[mask]
+        dy_all = IY[mask].astype(np.int32)
+        dx_all = IX[mask].astype(np.int32)
+        w_all  = np.exp(-c * np.hypot(Fm, Lm)).astype(np.float32)
+
         
-        alpha = dir_idx * np.pi / 4
-        sin_a, cos_a = np.sin(alpha), np.cos(alpha)
+        Lbin = np.rint(Lm * 2.0).astype(np.int32)
 
-        # local coordinates:
+        rays_dy, rays_dx, rays_w = [], [], []
         
-        forwards  = np.arange(0, d + 1)
-        laterals  = np.arange(-d, d + 1)
-        F, L      = np.meshgrid(forwards, laterals, indexing="ij")    
-
-        mask = np.abs(L) <= F / 2
-        Fm   = F[mask].astype(float)
-        Lm   = L[mask].astype(float)
-
-        # distances in local coordinate system:
+        # grouping:
         
-        dist = np.hypot(Fm, Lm)
+        for lb in np.unique(Lbin):
+            
+            sel = (Lbin == lb)
+            
+            order = np.argsort(Fm[sel])
+            rays_dy.append(dy_all[sel][order])
+            rays_dx.append(dx_all[sel][order])
+            rays_w .append(w_all [sel][order])
 
-        # rotation:
-        
-        dyf =  Fm * cos_a + Lm * sin_a
-        dxf = -Fm * sin_a + Lm * cos_a
-        dy  = round_away_from_zero(dyf)
-        dx  = round_away_from_zero(dxf)
-
-        w = np.exp(-c * dist)
-
-        kernels.append(VisionKernel(dy, dx, w))
+        kernels.append(VisionKernelRays(rays_dy, rays_dx, rays_w))
 
     return kernels
 
 
+def precompute_center_rays(d):
+    rays_dy, rays_dx = [], []
+    for dir_idx in range(8):
+        alpha = dir_idx * np.pi / 4.0
+        
+        dy = np.rint(np.arange(1, d+1) * np.cos(alpha)).astype(np.int32)
+        dx = np.rint(np.arange(1, d+1) * -1*np.sin(alpha)).astype(np.int32)
+        rays_dy.append(dy); rays_dx.append(dx)
+    return rays_dy, rays_dx
+
+
+def los_blocked(p0, p1, Pathes):
+    
+    "True if on the line p0->p1 we have building (Pathes == -1)."""
+    
+    y0, x0 = int(p0[0]), int(p0[1])
+    y1, x1 = int(p1[0]), int(p1[1])
+
+    dy = abs(y1 - y0)
+    dx = abs(x1 - x0)
+    sy = 1 if y0 < y1 else -1
+    sx = 1 if x0 < x1 else -1
+    err = dx - dy
+
+    y, x = y0, x0
+    while True:
+        if Pathes[y, x] == -1:            # здание на линии
+            return True
+        if y == y1 and x == x1:
+            break
+        e2 = 2 * err
+        if e2 > -dy:
+            err -= dy
+            x += sx
+        if e2 < dx:
+            err += dx
+            y += sy
+            
+    return False
+
+
+
+
+
+# Rays precalculation:
+
+center_dy_list, center_dx_list = precompute_center_rays(MODEL_PARAMS["d"])
+
+
+
 # Kernels precalculation: 
 
-KERNELS = precompute_kernels(MODEL_PARAMS["d"], MODEL_PARAMS["c"])
+
+KERNELS_RAYS = precompute_kernels_with_rays(MODEL_PARAMS["d"], MODEL_PARAMS["c"])

@@ -32,7 +32,7 @@ def plot_final_state(Pathes, MODEL_PARAMS, PATHES_PARAMS, N_walkers, simulation_
     c = MODEL_PARAMS["c"]
     d = MODEL_PARAMS["d"]
     tau = MODEL_PARAMS["tau"]
-    
+    simulation_number_str = str(simulation_number)
     
     # Right: Pathes
     fig, ax = plt.subplots(figsize=(6, 5), constrained_layout=True)
@@ -41,6 +41,6 @@ def plot_final_state(Pathes, MODEL_PARAMS, PATHES_PARAMS, N_walkers, simulation_
     fig.colorbar(im, ax=ax, shrink=0.8)
    
     figdir = "frames"
-    fname = f"{figdir}/final_result_"f"{simulation_number}.png"
+    fname = f"{figdir}/final_result_" + simulation_number_str + ".png"
     plt.savefig(fname, dpi=150)
     plt.close(fig)

@@ -1,8 +1,7 @@
-import optuna, numpy as np, json
 import matplotlib.pyplot as plt
 from simulate_trajectory import simulate_many_walkers
 from loss_function import loss_function
-from config import MODEL_PARAMS, PATHES_PARAMS
+from config import MODEL_PARAMS
 from config import N_walkers, t_max
 
 
